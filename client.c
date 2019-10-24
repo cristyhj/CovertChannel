@@ -1,13 +1,13 @@
 #include "common.h"
 
 
-
 int main() {
 	sync();
 	printf("Hello client\n");
-	set_core();
 	set_timer_handle();
+	set_core();
+	set_threshold();
 	
-	while (send_frame(45));
+	send_frame(73);
 	
 }

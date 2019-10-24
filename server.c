@@ -6,27 +6,11 @@ int main() {
 	sync();
 	printf("Hello server\n");
 	unsigned char data;
-	set_core();
 	set_timer_handle();
+	set_core();
+	set_threshold();
 	
-	data = listen_and_recv();
+	data = recv_frame();
 	printf("Recv = %d\n", data);
 	
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
