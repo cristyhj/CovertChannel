@@ -21,8 +21,11 @@ void set_core();
 void set_timer_handle();
 void set_threshold();
 
-void send_frame(unsigned char data);
-unsigned char recv_frame();
+int send_frame(unsigned char data);
+int recv_frame(unsigned char *res);
+
+
+void send_end_sequence();
 
 
 

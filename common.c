@@ -95,11 +95,15 @@ void send_not_ack() {
 	send_1();
 }
 
+void send_end_sequence() {
+	send_not_ack();
+}
+
 unsigned char xor(unsigned char x) {
-	unsigned char a;
+	unsigned char a = 0;
 	int i = 0;
 	for (i = 0; i < 8; i++) {
-		a ^= (x & (1 << i)) >> i;
+		a ^= (x >> i) & 1;
 	}
 	return a;
 }
@@ -119,7 +123,7 @@ unsigned char recv_bit() {
 	}
 }
 
-void send_frame(unsigned char data) {
+int send_frame(unsigned char data) {
 	int i;
 	send_1();
 	send_1();
@@ -130,8 +134,8 @@ void send_frame(unsigned char data) {
 		else send_0();
 	}
 	if (xor(data & 0x49)) send_1(); else send_0();		// 0100 1001‬
-	if (xor(data & 0x92)) send_1(); else send_0();		// 0100 1001‬
-	if (xor(data & 0x24)) send_1(); else send_0();		// 0100 1001‬
+	if (xor(data & 0x92)) send_1(); else send_0();		// 1001 0010‬
+	if (xor(data & 0x24)) send_1(); else send_0();		// 0010 0100‬
 	
 	set_timer_interval();
 	unsigned char a = recv_bit();
@@ -146,9 +150,12 @@ void send_frame(unsigned char data) {
 	
 	if (a && b && c == 0 && d) {
 		printf("Sent! %d\n", data);
+		return 0;
 	} else if (a && b == 0 && c && d) {
-		printf("Sent! %d\n", data);
+		printf("Received NOT ack!\n");
+		return 1;
 	}
+	return 0;	// no warnings
 }
 
 int recv_ack() {
@@ -188,13 +195,22 @@ int detect_start(unsigned char *bits) {
 		return 1;
 	return 0;
 }
+int detect_end(unsigned char *bits) {
+	if (bits[0] == 1 && bits[1] == 1 && bits[2] == 0 && bits[3] == 1)
+		return 1;
+	return 0;
+}
 
-unsigned char recv_frame() {
+int recv_frame(unsigned char *res) {
 	unsigned char bit;
 	unsigned char frame[15];
 	int receiving = 0;
 	int i = 4;
 	printf("Listening...\n");
+	frame[0] = 0;
+	frame[1] = 0;
+	frame[2] = 0;
+	frame[3] = 0;
 	set_timer_interval();
 	while (1) {
 		bit = recv_bit();
@@ -203,8 +219,11 @@ unsigned char recv_frame() {
 		frame[1] = frame[0];
 		frame[0] = bit;
 		printf("%d\n", bit);
+		if (!receiving && detect_end(frame)) {
+			return 0;
+		}
 		if (!receiving && detect_start(frame)) {
-			printf("_");
+			printf("_start\n");
 			receiving = 1;
 			continue;
 		}
@@ -212,28 +231,19 @@ unsigned char recv_frame() {
 			frame[i++] = bit;
 		}
 		if (i == 15) {
-			printf("_");
+			printf("_stop\n");
 			clear_timer();
 			if (verify_crc(frame)) {
 				send_ack();
-				return get_data(frame);
+				*res = get_data(frame);
+				return 1;
 			} else {
 				printf("CRC error!\n");
 				send_not_ack();
-				return recv_frame();
+				return -1;
 			}
-			return 0;
 		}
 	}
-}
-
-
-void* working_thread(void *data) {
-	long a = 1, X = 123000321;
-	while (!sampling_flag) {
-		a *= X;
-	}
-	return NULL;
 }
 
 void set_threshold() {
@@ -255,12 +265,12 @@ void set_threshold() {
 	sample = 0;
 	sampling_flag = 0;
 	
-	if (!fork()) {	// lunch another process to stimulate the processor
+	pid_t pid = fork();
+	if (!pid) {	// lunch another process to stimulate the processor
 		long a = 1, X = 123000321;
-		while (!sampling_flag) {
+		while (1) {
 			a *= X;
 		}
-		exit(0);
 	}
 	
 	while (!sampling_flag) {
@@ -273,7 +283,7 @@ void set_threshold() {
 	printf("Sample1= %ld\n", sample1);
 	
 	THRESHOLD = (sample1 + sample0) / 2;
-	
+	kill(pid, SIGKILL);
 	fd = fopen("settings", "w");
 	if (fd) {
 		fprintf(fd, "%ld", THRESHOLD);
